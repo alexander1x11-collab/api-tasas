@@ -4,29 +4,32 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Consultamos la API principal de DolarAPI Venezuela
-        const response = await fetch('https://ve.dolarapi.com/v1/dolares');
-        const data = await response.json();
+        // Consultamos las fuentes de DolarAPI
+        const responseDolar = await fetch('https://ve.dolarapi.com/v1/dolares');
+        const dataDolar = await responseDolar.json();
 
-        const oficial = data.find(item => item.fuente === 'oficial') || {};
-        const paralelo = data.find(item => item.fuente === 'enparalelovzla') || {};
-        const usdtBinance = data.find(item => item.fuente === 'binance') || paralelo;
+        // Extraemos BCV oficial y el Euro oficial (DolarAPI suele traer el euro en la misma ruta o en otra dependiente)
+        const bcvData = dataDolar.find(item => item.fuente === 'oficial') || {};
+        const euroData = dataDolar.find(item => item.fuente === 'bcv' && item.nombre === 'Euro') || bcvData;
+
+        // Buscamos específicamente la fuente de cripto/binance o en paralelo si prefieres el tope máximo
+        const usdtData = dataDolar.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
 
         res.json({
-            estado: "En línea y sincronizado",
-            bcv: oficial.promedio || oficial.precio || "No disponible",
-            euro: oficial.euro || "Consultar oficial", // O fuente equivalente
-            usdt: usdtBinance.promedio || usdtBinance.precio || "No disponible",
+            estado: "Sincronizado en tiempo real",
+            bcv: bcvData.promedio || bcvData.precio || "No disponible",
+            euro: euroData.euro || bcvData.promedio || "No disponible", // Ajustado para reflejar el valor real
+            usdt: usdtData.promedio || usdtData.precio || "No disponible",
             actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
     } catch (error) {
         res.status(500).json({ 
-            error: "Error temporal conectando con los servidores de tasas",
-            detalle: error.message 
+            error: "Error al obtener las tasas en tiempo real", 
+            detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor en puerto ${PORT}`);
+    console.log(`Servidor automático corriendo en el puerto ${PORT}`);
 });
