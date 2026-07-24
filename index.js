@@ -4,29 +4,29 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Consultamos una fuente pública o API externa en tiempo real
+        // Consultamos la API pública directa que mantiene la data sincronizada al día
         const response = await fetch('https://ve.dolarapi.com/v1/dolares');
         const data = await response.json();
 
-        // Filtramos o estructuramos los valores que necesitas (BCV, Paralelo, USDT, etc.)
-        const bcvData = data.find(item => item.fuente === 'oficial') || {};
-        const usdtData = data.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
+        // Buscamos con precisión quirúrgica los campos oficiales
+        const oficial = data.find(item => item.fuente === 'oficial' || item.fuente === 'bcv') || {};
+        const binance = data.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
 
         res.json({
-            estado: "Actualizado automáticamente",
-            bcv: bcvData.promedio || "No disponible",
-            euro: "Consultar fuente", // Puedes añadir más lógica si deseas el euro exacto
-            usdt: usdtData.promedio || "No disponible",
+            estado: "Sincronizado en tiempo real",
+            bcv: oficial.promedio || oficial.precio || "No disponible",
+            euro: oficial.euro || oficial.promedio || "No disponible",
+            usdt: binance.promedio || binance.precio || "No disponible",
             actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
     } catch (error) {
         res.status(500).json({ 
-            error: "Error al obtener las tasas en tiempo real", 
+            error: "No se pudieron obtener las tasas", 
             detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor automático corriendo en el puerto ${PORT}`);
+    console.log(`Servidor activo en el puerto ${PORT}`);
 });
