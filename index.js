@@ -4,36 +4,29 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Consultamos la API pública de cotizaciones de Venezuela en tiempo real
-        const response = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar');
+        // Consultamos la API principal de DolarAPI Venezuela
+        const response = await fetch('https://ve.dolarapi.com/v1/dolares');
         const data = await response.json();
 
+        const oficial = data.find(item => item.fuente === 'oficial') || {};
+        const paralelo = data.find(item => item.fuente === 'enparalelovzla') || {};
+        const usdtBinance = data.find(item => item.fuente === 'binance') || paralelo;
+
         res.json({
-            estado: "Sincronizado con fuentes oficiales y P2P",
-            bcv: data.monedas?.bcv?.price || "Actualizando...",
-            en_paralelo: data.monedas?.enparalelovzla?.price || "Actualizando...",
+            estado: "En línea y sincronizado",
+            bcv: oficial.promedio || oficial.precio || "No disponible",
+            euro: oficial.euro || "Consultar oficial", // O fuente equivalente
+            usdt: usdtBinance.promedio || usdtBinance.precio || "No disponible",
             actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
     } catch (error) {
-        // Plan de respaldo si falla la principal
-        try {
-            const backupRes = await fetch('https://ve.dolarapi.com/v1/dolares');
-            const backupData = await backupRes.json();
-            const bcvOficial = backupData.find(item => item.fuente === 'oficial') || {};
-            const paralelo = backupData.find(item => item.fuente === 'enparalelovzla') || {};
-
-            res.json({
-                estado: "Modo Respaldo Activo",
-                bcv: bcvOficial.promedio || "N/A",
-                en_paralelo: paralelo.promedio || "N/A",
-                actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
-            });
-        } catch (err) {
-            res.status(500).json({ error: "No se pudieron conectar las fuentes de tasas" });
-        }
+        res.status(500).json({ 
+            error: "Error temporal conectando con los servidores de tasas",
+            detalle: error.message 
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`API de tasas con respaldo corriendo en puerto ${PORT}`);
+    console.log(`Servidor en puerto ${PORT}`);
 });
