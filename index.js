@@ -4,21 +4,29 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Aquí puedes integrar las consultas a APIs públicas o páginas de cotización en tiempo real
-        // Por ahora, estructuramos la respuesta JSON lista para que tu app la lea perfectamente:
+        // Consultamos una fuente pública o API externa en tiempo real
+        const response = await fetch('https://ve.dolarapi.com/v1/dolares');
+        const data = await response.json();
+
+        // Filtramos o estructuramos los valores que necesitas (BCV, Paralelo, USDT, etc.)
+        const bcvData = data.find(item => item.fuente === 'oficial') || {};
+        const usdtData = data.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
+
         res.json({
-            fuente: "API Tasas Venezuela en Vivo",
-            estado: "Conectado y Operativo",
-            bcv: "742.23", // Tasa oficial referencial actual
-            euro: "844.22", // Tasa euro referencial actual
-            usdt: "872.05", // Tasa USDT / Binance referencial actual
-            actualizado: new Date().toISOString()
+            estado: "Actualizado automáticamente",
+            bcv: bcvData.promedio || "No disponible",
+            euro: "Consultar fuente", // Puedes añadir más lógica si deseas el euro exacto
+            usdt: usdtData.promedio || "No disponible",
+            actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
     } catch (error) {
-        res.status(500).json({ error: "No se pudieron obtener las tasas en este momento" });
+        res.status(500).json({ 
+            error: "Error al obtener las tasas en tiempo real", 
+            detalles: error.message 
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor de tasas corriendo en el puerto ${PORT}`);
+    console.log(`Servidor automático corriendo en el puerto ${PORT}`);
 });
