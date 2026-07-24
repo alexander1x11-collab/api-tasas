@@ -4,51 +4,29 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Intentamos consultar múltiples fuentes de forma simultánea para asegurar el dato real
-        const [resPydolar, resDolarApi] = await Promise.allSettled([
-            fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar').then(r => r.json()),
-            fetch('https://ve.dolarapi.com/v1/dolares').then(r => r.json())
-        ]);
+        // Consultamos una fuente pública o API externa en tiempo real
+        const response = await fetch('https://ve.dolarapi.com/v1/dolares');
+        const data = await response.json();
 
-        let bcvVal = "No disponible";
-        let euroVal = "No disponible";
-        let usdtVal = "No disponible";
-
-        // 1. Intentamos sacar de PydolarVenezuela (la más precisa)
-        if (resPydolar.status === 'fulfilled' && resPydolar.value?.monedas) {
-            const m = resPydolar.value.monedas;
-            bcvVal = m.bcv?.price || bcvVal;
-            euroVal = m.euro?.price || euroVal;
-            usdtVal = m.binance?.price || m.enparalelovzla?.price || usdtVal;
-        }
-
-        // 2. Si alguna quedó vacía, completamos con DolarAPI al instante
-        if ((bcvVal === "No disponible" || usdtVal === "No disponible") && resDolarApi.status === 'fulfilled' && Array.isArray(resDolarApi.value)) {
-            const arr = resDolarApi.value;
-            const oficial = arr.find(item => item.fuente === 'oficial') || {};
-            const binance = arr.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
-
-            if (bcvVal === "No disponible") bcvVal = oficial.promedio || oficial.precio || "No disponible";
-            if (euroVal === "No disponible") euroVal = oficial.euro || "No disponible";
-            if (usdtVal === "No disponible") usdtVal = binance.promedio || binance.precio || "No disponible";
-        }
+        // Filtramos o estructuramos los valores que necesitas (BCV, Paralelo, USDT, etc.)
+        const bcvData = data.find(item => item.fuente === 'oficial') || {};
+        const usdtData = data.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
 
         res.json({
-            estado: "Sincronizado y Automatizado",
-            bcv: bcvVal,
-            euro: euroVal,
-            usdt: usdtVal,
+            estado: "Actualizado automáticamente",
+            bcv: bcvData.promedio || "No disponible",
+            euro: "Consultar fuente", // Puedes añadir más lógica si deseas el euro exacto
+            usdt: usdtData.promedio || "No disponible",
             actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
-
     } catch (error) {
         res.status(500).json({ 
-            error: "Error interno procesando las tasas", 
+            error: "Error al obtener las tasas en tiempo real", 
             detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor maestro activo en el puerto ${PORT}`);
+    console.log(`Servidor automático corriendo en el puerto ${PORT}`);
 });
