@@ -4,31 +4,46 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        const responseDolar = await fetch('https://ve.dolarapi.com/v1/dolares');
-        const dataDolar = await responseDolar.json();
+        // Consultamos una API directa de cotizaciones actualizadas para Venezuela
+        const response = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=bcv');
+        const data = await response.json();
 
-        // Extraemos las fuentes de forma segura
-        const oficial = dataDolar.find(item => item.fuente === 'oficial') || {};
-        const paralelo = dataDolar.find(item => item.fuente === 'enparalelovzla') || {};
-        
-        // Buscamos USDT o tomamos el paralelo como respaldo si el campo varía
-        const usdtBinance = dataDolar.find(item => item.fuente === 'binance' || item.fuente === 'cripto') || paralelo;
+        // Intentamos obtener también la data general de monitores y paralelo/binance
+        const responseGeneral = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar');
+        const dataGeneral = await responseGeneral.json();
+
+        const bcvPrice = data?.monedas?.bcv?.price || dataGeneral?.monedas?.bcv?.price || "No disponible";
+        const euroPrice = data?.monedas?.euro?.price || dataGeneral?.monedas?.euro?.price || "No disponible";
+        const usdtPrice = data?.monedas?.binance?.price || dataGeneral?.monedas?.enparalelovzla?.price || "No disponible";
 
         res.json({
-            estado: "Sincronizado en tiempo real",
-            bcv: oficial.promedio || oficial.precio || "No disponible",
-            euro: oficial.euro || oficial.promedio || "No disponible", 
-            usdt: usdtBinance.promedio || usdtBinance.precio || paralelo.promedio || "No disponible",
+            estado: "Sincronizado con fuentes directas",
+            bcv: bcvPrice,
+            euro: euroPrice,
+            usdt: usdtPrice,
             actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
         });
     } catch (error) {
-        res.status(500).json({ 
-            error: "Error al obtener las tasas", 
-            detalles: error.message 
-        });
+        // Respaldo secundario por si la API directa llega a presentar intermitencia
+        try {
+            const backupRes = await fetch('https://ve.dolarapi.com/v1/dolares');
+            const backupData = await backupRes.json();
+            const oficial = backupData.find(item => item.fuente === 'oficial') || {};
+            const paralelo = backupData.find(item => item.fuente === 'enparalelovzla') || {};
+
+            res.json({
+                estado: "Modo Respaldo Activo",
+                bcv: oficial.promedio || oficial.precio || "N/A",
+                euro: oficial.euro || "N/A",
+                usdt: paralelo.promedio || paralelo.precio || "N/A",
+                actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
+            });
+        } catch (err) {
+            res.status(500).json({ error: "No se pudieron conectar las fuentes de tasas", detalle: error.message });
+        }
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor automático corriendo en el puerto ${PORT}`);
+    console.log(`Servidor de tasas preciso corriendo en el puerto ${PORT}`);
 });
