@@ -4,29 +4,35 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Consultamos la API pública directa que mantiene la data sincronizada al día
+        console.log("Intentando conectar con la API externa...");
         const response = await fetch('https://ve.dolarapi.com/v1/dolares');
-        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-        // Buscamos con precisión quirúrgica los campos oficiales
-        const oficial = data.find(item => item.fuente === 'oficial' || item.fuente === 'bcv') || {};
-        const binance = data.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
+        const data = await response.json();
+        console.log("Datos recibidos de la API:", JSON.stringify(data));
+
+        const oficial = data.find(item => item.fuente === 'oficial') || {};
+        const binance = data.find(item => item.fuente === 'binance') || {};
 
         res.json({
-            estado: "Sincronizado en tiempo real",
-            bcv: oficial.promedio || oficial.precio || "No disponible",
-            euro: oficial.euro || oficial.promedio || "No disponible",
-            usdt: binance.promedio || binance.precio || "No disponible",
-            actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
+            debug: "Código nuevo cargado correctamente",
+            bcv: oficial.promedio || oficial.precio || "No encontrado",
+            euro: oficial.euro || "No encontrado",
+            usdt: binance.promedio || binance.precio || "No encontrado",
+            crudo: data
         });
     } catch (error) {
+        console.error("Error en el servidor:", error.message);
         res.status(500).json({ 
-            error: "No se pudieron obtener las tasas", 
+            error: "Fallo la conexión", 
             detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor activo en el puerto ${PORT}`);
+    console.log(`Servidor de depuración corriendo en el puerto ${PORT}`);
 });
