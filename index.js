@@ -1,25 +1,16 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-app.get('/tasas', async (req, res) => {
-    try {
-        const respuesta = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar/all');
-        const data = await respuesta.json();
-
-        res.json({
-            status: "success",
-            actualizado: new Date().toLocaleString(),
-            monitors: data.monitors
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: "error",
-            mensaje: "No se pudieron obtener las tasas",
-            detalle: error.message
-        });
-    }
+// Ruta principal para que devuelva las tasas
+app.get('/', (req, res) => {
+    res.json({
+        estado: "Activo",
+        bcv: "36.50", // (Aquí iría la lógica o el valor que extraigas)
+        euro: "39.20",
+        usdt: "37.10",
+        actualizado: new Date()
+    });
 });
 
 app.listen(PORT, () => {
