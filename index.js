@@ -4,70 +4,55 @@ const PORT = process.env.PORT || 10000;
 
 app.get('/', async (req, res) => {
     try {
-        // Obtenemos la fecha y hora exacta en Caracas para manejar cierres y fines de semana
-        const fechaCaracas = new Date().toLocaleString("en-US", { timeZone: "America/Caracas" });
-        const fechaActual = new Date(fechaCaracas);
-        const diaSemana = fechaActual.getDay(); // 0 = Domingo, 6 = Sábado
-        const horaActual = fechaActual.getHours();
-
-        // Indicador de fin de semana o fuera de horario de oficina (después de las 4 PM)
-        let mensajeEstado = "En horario hábil";
-        if (diaSemana === 0 || diaSemana === 6) {
-            mensajeEstado = "Fin de semana (Usando último cierre oficial y P2P activo)";
-        } else if (horaActual >= 16) {
-            mensajeEstado = "Post-cierre 4:00 PM (Mostrando tasa oficial vigente y cierre)";
-        }
-
-        // Consultamos la API de alta disponibilidad con parámetro anti-cache dinámico
-        const timestamp = fechaActual.getTime();
-        const response = await fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
-            headers: { 'Cache-Control': 'no-cache' }
-        });
+        const timestamp = new Date().getTime();
         
-        const data = await response.json();
-        const monedas = data?.monedas || {};
+        // Consultamos múltiples fuentes en paralelo para asegurar que ninguna tasa quede vacía
+        const [resPyDolar, resDolarApi] = await Promise.allSettled([
+            fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`).then(r => r.json()),
+            fetch('https://ve.dolarapi.com/v1/dolares').then(r => r.json())
+        ]);
 
-        const bcvVal = monedas.bcv?.price;
-        const euroVal = monedas.euro?.price;
-        const usdtVal = monedas.binance?.price || monedas.enparalelovzla?.price;
+        let bcvVal = "No disponible";
+        let euroVal = "No disponible";
+        let usdtVal = "No disponible";
 
-        if (bcvVal) {
-            return res.json({
-                estado: mensajeEstado,
-                bcv: bcvVal,
-                euro: euroVal || bcvVal,
-                usdt: usdtVal || "No disponible",
-                actualizado_en_venezuela: fechaActual.toLocaleString("es-VE")
-            });
+        // 1. Intentamos extraer de PyDolarVenezuela
+        if (resPyDolar.status === 'fulfilled' && resPyDolar.value?.monedas) {
+            const m = resPyDolar.value.monedas;
+            bcvVal = m.bcv?.price || bcvVal;
+            euroVal = m.euro?.price || bcvVal;
+            
+            // Buscamos todas las variantes posibles de USDT / Binance / Paralelo
+            usdtVal = m.binance?.price || m.enparalelovzla?.price || m.usdt?.price || usdtVal;
         }
 
-        throw new Error("No se pudo obtener el valor principal");
+        // 2. Si el USDT o el BCV siguen sin cargar, los completamos de inmediato con DolarAPI
+        if (usdtVal === "No disponible" || bcvVal === "No disponible" && resDolarApi.status === 'fulfilled' && Array.isArray(resDolarApi.value)) {
+            const arr = resDolarApi.value;
+            const oficial = arr.find(item => item.fuente === 'oficial') || {};
+            const binance = arr.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla' || item.fuente === ' paralelo') || {};
+
+            if (bcvVal === "No disponible") bcvVal = oficial.promedio || oficial.precio || "No disponible";
+            if (euroVal === "No disponible") euroVal = oficial.euro || oficial.promedio || "No disponible";
+            if (usdtVal === "No disponible") usdtVal = binance.promedio || binance.precio || binance.valor || "No disponible";
+        }
+
+        res.json({
+            estado: "Sincronizado y Completo",
+            bcv: bcvVal,
+            euro: euroVal,
+            usdt: usdtVal,
+            actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
+        });
 
     } catch (error) {
-        // Respaldo secundario infalible si la principal llega a fallar
-        try {
-            const backupRes = await fetch('https://ve.dolarapi.com/v1/dolares');
-            const backupData = await backupRes.json();
-            
-            const oficial = backupData.find(item => item.fuente === 'oficial') || {};
-            const binance = backupData.find(item => item.fuente === 'binance' || item.fuente === 'enparalelovzla') || {};
-
-            res.json({
-                estado: "Modo Respaldo Activo (Cierre / Finde)",
-                bcv: oficial.promedio || oficial.precio || "N/A",
-                euro: oficial.euro || oficial.promedio || "N/A",
-                usdt: binance.promedio || binance.precio || "N/A",
-                actualizado_en_venezuela: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
-            });
-        } catch (err) {
-            res.status(500).json({ 
-                error: "Error crítico al sincronizar las tasas de cierre", 
-                detalles: err.message 
-            });
-        }
+        res.status(500).json({ 
+            error: "Error procesando las tasas", 
+            detalles: error.message 
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor de tasas continuas activo en el puerto ${PORT}`);
+    console.log(`Servidor de tasas activo en puerto ${PORT}`);
 });
