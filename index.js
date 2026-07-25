@@ -6,22 +6,21 @@ app.get('/', async (req, res) => {
     try {
         const timestamp = new Date().getTime();
 
-        // 1. Fuente Principal 1 (PyDolarVenezuela)
-        const p1 = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-        }).then(r => r.json()).catch(() => null);
+        // 1. Scraping DIRECTO y en vivo a la página oficial del BCV (sin intermediarios perezosos)
+        const bcvPromise = fetch(`https://www.bcv.org.ve/`, {
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        }).then(r => r.text()).catch(() => null);
 
-        // 2. Fuente de Respaldo Automática 2 (DolarAPI Venezuela Oficial)
-        const p2 = fetch(`https://ve.dolarapi.com/v1/dolares/oficial`, {
+        // 2. Respaldo por si la web del BCV llega a bloquear temporalmente la conexión
+        const backupPromise = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
             headers: { 'Cache-Control': 'no-cache' }
         }).then(r => r.json()).catch(() => null);
 
-        // 3. Fuente de Respaldo Automática 3 (Monitoreo general de divisas)
-        const p3 = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar/bcv`, {
-            headers: { 'Cache-Control': 'no-cache' }
-        }).then(r => r.json()).catch(() => null);
-
-        // 4. Binance P2P para USDT en tiempo real
+        // 3. Binance P2P para el USDT en tiempo real 24/7
         const binancePromise = fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
             method: 'POST',
             headers: {
@@ -40,36 +39,42 @@ app.get('/', async (req, res) => {
             })
         }).then(r => r.json()).catch(() => null);
 
-        const [res1, res2, res3, binanceData] = await Promise.all([p1, p2, p3, binancePromise]);
+        const [bcvHtml, backupData, binanceData] = await Promise.all([bcvPromise, backupPromise, binancePromise]);
 
         let bcvVal = 0;
         let euroVal = 0;
 
-        // Comprobación automática en cascada entre las fuentes disponibles
-        if (res1) {
-            bcvVal = res1?.monedas?.bcv?.price || res1?.bcv?.price || 0;
-            euroVal = res1?.monedas?.euro?.price || res1?.euro?.price || 0;
+        // Intentar extraer el Dólar y el Euro directamente del HTML oficial del BCV
+        if (bcvHtml) {
+            try {
+                // Buscamos las etiquetas donde el BCV aloja las tasas en su web oficial
+                const dollarMatch = bcvHtml.match(/id="dolar"[^>]*>[\s\S]*?<strong>\s*([0-9,.]+)\s*<\/strong>/i);
+                const euroMatch = bcvHtml.match(/id="euro"[^>]*>[\s\S]*?<strong>\s*([0-9,.]+)\s*<\/strong>/i);
+
+                if (dollarMatch && dollarMatch[1]) {
+                    bcvVal = parseFloat(dollarMatch[1].replace(/\./g, '').replace(',', '.'));
+                }
+                if (euroMatch && euroMatch[1]) {
+                    euroVal = parseFloat(euroMatch[1].replace(/\./g, '').replace(',', '.'));
+                }
+            } catch (e) {
+                console.log("Error haciendo parsing del HTML del BCV:", e.message);
+            }
         }
 
-        // Si la fuente 1 no dio el dólar o euro, intenta con la fuente 2 (DolarAPI)
-        if (!bcvVal && res2) {
-            bcvVal = res2.promedio || res2.precio || 0;
+        // Si el scraping directo falló o no encontró los datos, usamos la API de respaldo de inmediato
+        if (!bcvVal && backupData) {
+            bcvVal = backupData?.monedas?.bcv?.price || backupData?.bcv?.price || 0;
         }
-        if (!euroVal && res2) {
-            // Si DolarAPI tiene el euro separado, lo busca, si no, usa el del dólar
-            euroVal = res2.euro || bcvVal;
-        }
-
-        // Si la fuente 1 y 2 fallaron, intenta con la fuente 3
-        if (!bcvVal && res3) {
-            bcvVal = res3?.price || res3?.monedas?.bcv?.price || 737.88;
+        if (!euroVal && backupData) {
+            euroVal = backupData?.monedas?.euro?.price || backupData?.euro?.price || bcvVal;
         }
 
-        // Valores finales por defecto si ninguna responde
+        // Si todo lo demás falla, dejamos un valor de seguridad
         if (!bcvVal) bcvVal = 737.88;
         if (!euroVal) euroVal = bcvVal;
 
-        // Cálculo automático del USDT en Binance P2P
+        // Cálculo exacto del USDT en Binance P2P
         let usdtReal = "No disponible";
         if (binanceData && binanceData.data && binanceData.data.length > 0) {
             const prices = binanceData.data.slice(0, 3).map(item => parseFloat(item.adv.price));
@@ -78,7 +83,7 @@ app.get('/', async (req, res) => {
         }
 
         res.json({
-            estado: "Multi-APIs Automáticas Sincronizadas",
+            estado: "Scraping BCV Directo y Binance Activos",
             bcv: Number(bcvVal),
             euro: Number(euroVal),
             usdt: usdtReal,
@@ -87,12 +92,12 @@ app.get('/', async (req, res) => {
 
     } catch (error) {
         res.status(500).json({ 
-            error: "Error en el servidor multifuente", 
+            error: "Error en el servidor de scraping", 
             detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor multifuente activo en puerto ${PORT}`);
+    console.log(`Servidor de tasas directas activo en puerto ${PORT}`);
 });
