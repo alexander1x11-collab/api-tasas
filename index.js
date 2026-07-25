@@ -6,12 +6,17 @@ app.get('/', async (req, res) => {
     try {
         const timestamp = new Date().getTime();
 
-        // 1. Consultamos la API principal de PyDolarVenezuela que contiene los datos oficiales separados del BCV
-        const bcvPromise = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
+        // 1. Consultamos DolarAPI oficial para obtener tasas limpias
+        const bcvPromise = fetch(`https://ve.dolarapi.com/v1/dolares/oficial`, {
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         }).then(r => r.json()).catch(() => null);
 
-        // 2. Binance P2P para USDT con cabeceras de navegador reales
+        // 2. Consultamos PyDolarVenezuela para el Euro y respaldo
+        const euroPromise = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
+            headers: { 'Cache-Control': 'no-cache' }
+        }).then(r => r.json()).catch(() => null);
+
+        // 3. Binance P2P para USDT en tiempo real exacto
         const binancePromise = fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
             method: 'POST',
             headers: {
@@ -32,23 +37,34 @@ app.get('/', async (req, res) => {
             })
         }).then(r => r.json()).catch(() => null);
 
-        const [bcvData, binanceData] = await Promise.all([bcvPromise, binancePromise]);
+        const [bcvData, euroData, binanceData] = await Promise.all([bcvPromise, euroPromise, binancePromise]);
 
-        // Extracción limpia y directa de los valores oficiales de la API
-        let bcvVal = 737.88;
-        let euroVal = 776.25;
+        // Extracción exacta y separada por tipo de moneda
+        let bcvVal = 0;
+        let euroVal = 0;
 
-        if (bcvData) {
-            // Intentamos extraer el dólar oficial
-            const dolarOficial = bcvData?.monedas?.bcv?.price || bcvData?.bcv?.price;
-            if (dolarOficial) bcvVal = parseFloat(dolarOficial);
-
-            // Intentamos extraer el euro oficial de forma independiente
-            const euroOficial = bcvData?.monedas?.euro?.price || bcvData?.euro?.price;
-            if (euroOficial) euroVal = parseFloat(euroOficial);
+        // Dólar BCV desde DolarAPI o respaldo
+        if (bcvData && bcvData.promedio) {
+            bcvVal = parseFloat(bcvData.promedio);
+        } else if (euroData) {
+            bcvVal = parseFloat(euroData?.monedas?.bcv?.price || euroData?.bcv?.price || 0);
         }
 
-        // Cálculo exacto del USDT en Binance P2P
+        // Euro BCV independiente desde la estructura oficial
+        if (euroData) {
+            euroVal = parseFloat(euroData?.monedas?.euro?.price || euroData?.euro?.price || 0);
+        }
+
+        // Si DolarAPI trae un objeto para oficiales con euro separado
+        if (!euroVal && bcvData && bcvData.euro) {
+            euroVal = parseFloat(bcvData.euro);
+        }
+
+        // Respaldo estricto si alguna viene en 0
+        if (!bcvVal) bcvVal = 737.88;
+        if (!euroVal) euroVal = 776.25;
+
+        // Cálculo dinámico real del USDT en Binance P2P
         let usdtReal = "864.33";
         if (binanceData && binanceData.data && binanceData.data.length > 0) {
             const prices = binanceData.data.slice(0, 3).map(item => parseFloat(item.adv.price));
@@ -57,7 +73,7 @@ app.get('/', async (req, res) => {
         }
 
         res.json({
-            estado: "Tasas Oficiales Separadas y Sincronizadas",
+            estado: "Tasas Oficiales y P2P Sincronizadas",
             bcv: Number(bcvVal),
             euro: Number(euroVal),
             usdt: usdtReal,
