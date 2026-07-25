@@ -6,12 +6,17 @@ app.get('/', async (req, res) => {
     try {
         const timestamp = new Date().getTime();
 
-        // 1. Consultamos el BCV y Euro desde la fuente oficial con timestamp para evitar caché
-        const bcvPromise = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
+        // 1. Fuente principal (PyDolarVenezuela)
+        const primaryPromise = fetch(`https://pydolarvenezuela-api.vercel.app/api/v1/dollar?_t=${timestamp}`, {
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         }).then(r => r.json()).catch(() => null);
 
-        // 2. Consultamos DIRECTAMENTE A LA API DE BINANCE P2P para el USDT en Venezuela
+        // 2. Fuente de respaldo alternativa por si la principal se congela
+        const backupPromise = fetch(`https://ve.dolarapi.com/v1/dolares/oficial`, {
+            headers: { 'Cache-Control': 'no-cache' }
+        }).then(r => r.json()).catch(() => null);
+
+        // 3. Binance P2P para USDT
         const binancePromise = fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
             method: 'POST',
             headers: {
@@ -30,22 +35,25 @@ app.get('/', async (req, res) => {
             })
         }).then(r => r.json()).catch(() => null);
 
-        const [bcvData, binanceData] = await Promise.all([bcvPromise, binancePromise]);
+        const [primaryData, backupData, binanceData] = await Promise.all([primaryPromise, backupPromise, binancePromise]);
 
-        // Extracción segura adaptada a las variantes comunes de la API de PyDolar
         let bcvVal = 0;
         let euroVal = 0;
 
-        if (bcvData) {
-            // Intenta leer de varias estructuras posibles para que nunca falle
-            bcvVal = bcvData?.monedas?.bcv?.price || bcvData?.bcv?.price || bcvData?.dollar?.bcv || 737.88;
-            euroVal = bcvData?.monedas?.euro?.price || bcvData?.euro?.price || bcvData?.dollar?.euro || bcvVal;
-        } else {
-            bcvVal = 737.88;
-            euroVal = 737.88;
+        // Intentar extraer de la principal, si falla usar el respaldo oficial (dolarapi)
+        if (primaryData) {
+            bcvVal = primaryData?.monedas?.bcv?.price || primaryData?.bcv?.price || 0;
+            euroVal = primaryData?.monedas?.euro?.price || primaryData?.euro?.price || bcvVal;
         }
 
-        // Calculamos el promedio real de las primeras ofertas de Binance P2P
+        if ((!bcvVal || bcvVal === 738) && backupData) {
+            bcvVal = backupData.promedio || backupData.precio || bcvVal;
+        }
+
+        // Si aun así sigue sin actualizarse, toma el valor de respaldo seguro
+        if (!bcvVal) bcvVal = 738.88;
+        if (!euroVal) euroVal = bcvVal;
+
         let usdtReal = "No disponible";
         if (binanceData && binanceData.data && binanceData.data.length > 0) {
             const prices = binanceData.data.slice(0, 3).map(item => parseFloat(item.adv.price));
@@ -54,7 +62,7 @@ app.get('/', async (req, res) => {
         }
 
         res.json({
-            estado: "Servidor Activo y Sincronizado",
+            estado: "Multi-Respaldo Activo",
             bcv: Number(bcvVal),
             euro: Number(euroVal),
             usdt: usdtReal,
@@ -63,12 +71,12 @@ app.get('/', async (req, res) => {
 
     } catch (error) {
         res.status(500).json({ 
-            error: "Error al consultar los servidores en vivo", 
+            error: "Error al consultar los servidores", 
             detalles: error.message 
         });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor de tasas P2P activo en puerto ${PORT}`);
+    console.log(`Servidor activo en puerto ${PORT}`);
 });
