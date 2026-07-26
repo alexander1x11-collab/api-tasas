@@ -1,7 +1,6 @@
 const http = require('http');
 
 const server = http.createServer(async (req, res) => {
-    // Configurar cabeceras para que devuelva JSON
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
     if (req.url === '/') {
@@ -12,32 +11,56 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            const apiKey = process.env.API_KEY;
+            const apiKey = process.env.NEW_SECRET || process.env.API_KEY;
             
             if (!apiKey) {
                 res.statusCode = 500;
-                res.end(JSON.stringify({ error: "Falta configurar la API_KEY en las variables de entorno de Render" }));
+                res.end(JSON.stringify({ error: "Falta configurar la API Key en las variables de entorno de Render" }));
                 return;
             }
 
-            // URL y cabecera corregidas según la documentación oficial de MontosVE
-            const response = await fetch('https://montosve.com/v1/fx/rates', {
-                method: 'GET',
-                headers: {
-                    'X-API-Key': apiKey,
-                    'Accept': 'application/json'
+            // Probamos varias rutas comunes de APIs en paralelo
+            const posiblesRutas = [
+                'https://montosve.com/api/v1/fx/rates',
+                'https://montosve.com/v1/fx/rates',
+                'https://montosve.com/api/rates',
+                'https://montosve.com/rates'
+            ];
+
+            let resultadoExitoso = null;
+            let rutaQueFunciono = '';
+
+            for (const url of posiblesRutas) {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-API-Key': apiKey,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const texto = await response.text();
+                
+                // Si la respuesta empieza con '{' o '[', significa que es un JSON válido y no un error HTML 404
+                if (texto.trim().startsWith('{') || texto.trim().startsWith('[')) {
+                    resultadoExitoso = JSON.parse(texto);
+                    rutaQueFunciono = url;
+                    break;
                 }
-            });
+            }
 
-            const responseText = await response.text();
-
-            try {
-                const data = JSON.parse(responseText);
+            if (resultadoExitoso) {
                 res.statusCode = 200;
-                res.end(JSON.stringify({ estado: "Conexión exitosa", tasas: data }, null, 2));
-            } catch (e) {
+                res.end(JSON.stringify({ 
+                    estado: "Conexión exitosa", 
+                    encontrado_en: rutaQueFunciono, 
+                    tasas: resultadoExitoso 
+                }, null, 2));
+            } else {
                 res.statusCode = 500;
-                res.end(JSON.stringify({ error: "MontosVE no devolvió un JSON válido", raw: responseText }));
+                res.end(JSON.stringify({ 
+                    error: "Ninguna de las rutas probadas devolvió un JSON válido. Revisa la documentación de MontosVE para confirmar la URL exacta de la API." 
+                }));
             }
 
         } catch (error) {
@@ -47,7 +70,6 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Si entra a cualquier otra ruta
     res.statusCode = 404;
     res.end(JSON.stringify({ error: "Ruta no encontrada" }));
 });
