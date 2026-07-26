@@ -1,32 +1,18 @@
 const https = require('https');
 
-function consultarMontosVE(apiKey) {
+function fetchJson(url) {
     return new Promise((resolve, reject) => {
-        const opciones = {
-            hostname: 'api.montosve.com',
-            path: '/v1/fx/rates',
-            method: 'GET',
-            headers: {
-                'X-API-Key': apiKey,
-                'Accept': 'application/json',
-                'User-Agent': 'Mozilla/5.0'
-            }
-        };
-
-        const req = https.request(opciones, (res) => {
-            let datos = '';
-            res.on('data', chunk => datos += chunk);
+        https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
             res.on('end', () => {
                 try {
-                    resolve({ status: res.statusCode, body: JSON.parse(datos) });
+                    resolve(JSON.parse(data));
                 } catch (e) {
-                    resolve({ status: res.statusCode, body: datos });
+                    reject(new Error("Respuesta no válida"));
                 }
             });
-        });
-
-        req.on('error', err => reject(err));
-        req.end();
+        }).on('error', err => reject(err));
     });
 }
 
@@ -41,22 +27,17 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            const apiKey = process.env.API_KEY || process.env.NEW_SECRET;
-
-            if (!apiKey) {
-                res.statusCode = 500;
-                res.end(JSON.stringify({ error: "Falta configurar la API Key en las variables de entorno de Render" }));
-                return;
-            }
-
-            const resultado = await consultarMontosVE(apiKey);
-
-            res.statusCode = resultado.status;
-            res.end(JSON.stringify(resultado.body, null, 2));
-
+            // Intentamos consultar una API pública y gratuita de alta disponibilidad
+            const data = await fetchJson('https://ve.dolarapi.com/v1/dolares');
+            
+            res.statusCode = 200;
+            res.end(JSON.stringify(data, null, 2));
         } catch (error) {
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Error interno al conectar", detalle: error.message }));
+            res.end(JSON.stringify({ 
+                error: "No se pudieron obtener las tasas en este momento", 
+                detalle: error.message 
+            }));
         }
         return;
     }
