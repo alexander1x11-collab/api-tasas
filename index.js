@@ -1,7 +1,5 @@
-const http = 'http';
 const https = require('https');
 
-// Función auxiliar para hacer peticiones con Node nativo garantizando compatibilidad total
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
         https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
@@ -29,8 +27,7 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            // Usamos la API pública directa
-            const data = await fetchJson('https://pydolarvenezuela.org/api/v1/dollar?page=all');
+            const data = await fetchJson('https://ve.dolarapi.com/v1/dolares');
             
             res.statusCode = 200;
             res.end(JSON.stringify(data, null, 2));
