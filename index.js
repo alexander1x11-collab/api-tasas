@@ -1,18 +1,32 @@
 const https = require('https');
 
-function fetchJson(url) {
+function consultarMontosVE(apiKey) {
     return new Promise((resolve, reject) => {
-        https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
+        const opciones = {
+            hostname: 'montosve.com',
+            path: '/api/v1/fx/rates',
+            method: 'GET',
+            headers: {
+                'X-API-Key': apiKey,
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
+            }
+        };
+
+        const req = https.request(opciones, (res) => {
+            let datos = '';
+            res.on('data', chunk => datos += chunk);
             res.on('end', () => {
                 try {
-                    resolve(JSON.parse(data));
+                    resolve({ status: res.statusCode, body: JSON.parse(datos) });
                 } catch (e) {
-                    reject(new Error("La respuesta no es un JSON válido"));
+                    resolve({ status: res.statusCode, body: datos });
                 }
             });
-        }).on('error', err => reject(err));
+        });
+
+        req.on('error', err => reject(err));
+        req.end();
     });
 }
 
@@ -27,13 +41,23 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            const data = await fetchJson('https://ve.dolarapi.com/v1/dolares');
-            
-            res.statusCode = 200;
-            res.end(JSON.stringify(data, null, 2));
+            // Toma la clave que configuraste en Render
+            const apiKey = process.env.API_KEY || process.env.NEW_SECRET;
+
+            if (!apiKey) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: "Falta configurar la API Key en las variables de entorno de Render" }));
+                return;
+            }
+
+            const resultado = await consultarMontosVE(apiKey);
+
+            res.statusCode = resultado.status;
+            res.end(JSON.stringify(resultado.body, null, 2));
+
         } catch (error) {
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Error al obtener las tasas", detalle: error.message }));
+            res.end(JSON.stringify({ error: "Error interno al conectar con MontosVE", detalle: error.message }));
         }
         return;
     }
