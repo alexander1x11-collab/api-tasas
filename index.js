@@ -19,34 +19,52 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            // URL oficial exacta según la documentación de MontosVE
-            const urlOficial = 'https://montosve.com/fx/rates';
-            
-            const response = await fetch(urlOficial, {
-                method: 'GET',
-                headers: {
-                    'X-API-Key': apiKey,
-                    'Accept': 'application/json'
+            // Lista exhaustiva de variantes de rutas para dar con el endpoint correcto
+            const rutasAProbar = [
+                'https://montosve.com/api/fx/rates',
+                'https://montosve.com/api/v1/rates',
+                'https://montosve.com/v1/rates',
+                'https://montosve.com/api/tasas',
+                'https://montosve.com/fx/rates',
+                'https://montosve.com/api/v1/fx/rates'
+            ];
+
+            let registroResultados = [];
+
+            for (const url of rutasAProbar) {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'X-API-Key': apiKey,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const texto = await response.text();
+                
+                // Verificamos si responde con JSON válido (éxito)
+                if (response.status === 200 && (texto.trim().startsWith('{') || texto.trim().startsWith('['))) {
+                    res.statusCode = 200;
+                    res.end(JSON.stringify({ 
+                        estado: "¡Encontrado con éxito!", 
+                        url_correcta: url, 
+                        tasas: JSON.parse(texto) 
+                    }, null, 2));
+                    return;
                 }
-            });
 
-            const responseText = await response.text();
-
-            try {
-                const data = JSON.parse(responseText);
-                res.statusCode = 200;
-                res.end(JSON.stringify({ 
-                    estado: "Conexión exitosa", 
-                    tasas: data 
-                }, null, 2));
-            } catch (e) {
-                res.statusCode = 500;
-                res.end(JSON.stringify({ 
-                    error: "MontosVE no devolvió un JSON válido", 
-                    status_http: response.status,
-                    raw: responseText 
-                }));
+                registroResultados.push({
+                    url_intentada: url,
+                    status: response.status
+                });
             }
+
+            // Si ninguna devolvió JSON válido
+            res.statusCode = 500;
+            res.end(JSON.stringify({ 
+                error: "Ninguna ruta devolvió un JSON válido. Todas respondieron con error o HTML.",
+                detalles_intentos: registroResultados 
+            }, null, 2));
 
         } catch (error) {
             res.statusCode = 500;
