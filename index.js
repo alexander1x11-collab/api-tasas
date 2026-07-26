@@ -1,6 +1,24 @@
-const http = require('http');
+const http = 'http';
+const https = require('https');
 
-const server = http.createServer(async (req, res) => {
+// Función auxiliar para hacer peticiones con Node nativo garantizando compatibilidad total
+function fetchJson(url) {
+    return new Promise((resolve, reject) => {
+        https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    resolve(JSON.parse(data));
+                } catch (e) {
+                    reject(new Error("La respuesta no es un JSON válido"));
+                }
+            });
+        }).on('error', err => reject(err));
+    });
+}
+
+const server = require('http').createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
     if (req.url === '/') {
@@ -11,21 +29,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            const response = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar?page=all', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0'
-                }
-            });
-
-            const responseText = await response.text();
-            const data = JSON.parse(responseText);
-
-            // Devuelve directamente el JSON puro de las tasas para que se vea impecable
+            // Usamos la API pública directa
+            const data = await fetchJson('https://pydolarvenezuela.org/api/v1/dollar?page=all');
+            
             res.statusCode = 200;
             res.end(JSON.stringify(data, null, 2));
-
         } catch (error) {
             res.statusCode = 500;
             res.end(JSON.stringify({ error: "Error al obtener las tasas", detalle: error.message }));
