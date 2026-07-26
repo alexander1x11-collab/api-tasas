@@ -16,7 +16,6 @@ function fetchJson(url) {
     });
 }
 
-// Función limpia para extraer y limpiar los precios de Binance P2P
 function fetchBinanceP2P() {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({
@@ -47,7 +46,6 @@ function fetchBinanceP2P() {
             res.on('end', () => {
                 try {
                     const parsed = JSON.parse(body);
-                    // Extraemos solo los precios reales y los convertimos a número con 2 decimales
                     const precios = parsed.data ? parsed.data.map(item => parseFloat(item.adv.price)) : [];
                     const promedio = precios.length > 0 ? (precios.reduce((a, b) => a + b, 0) / precios.length).toFixed(2) : null;
                     resolve({
@@ -71,41 +69,24 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/') {
         res.statusCode = 200;
-        res.end(JSON.stringify({ mensaje: "Servidor de tasas activo y limpio" }));
+        res.end(JSON.stringify({ mensaje: "Servidor de tasas multi-fuente activo" }));
         return;
     }
 
     if (req.url === '/api/tasas') {
         try {
-            const [dolarApi, binanceData] = await Promise.allSettled([
+            // Consultamos en paralelo DolarApi, PyDolarVenezuela y Binance P2P
+            const [dolarApi, pyDolar, binanceData] = await Promise.allSettled([
                 fetchJson('https://ve.dolarapi.com/v1/dolares'),
+                fetchJson('https://pydolarvenezuela-api.vercel.app/api/v1/dollar'),
                 fetchBinanceP2P()
             ]);
-
-            // Formateamos DolarApi para que muestre nombres limpios y valores bien redondeados
-            let tasasLocales = {};
-            if (dolarApi.status === 'fulfilled' && Array.isArray(dolarApi.value)) {
-                dolarApi.value.forEach(item => {
-                    if (item.fuente && item.promedio) {
-                        tasasLocales[item.fuente] = {
-                            nombre: item.nombre || item.fuente,
-                            precio: Number(item.promedio.toFixed(2)),
-                            actualizado: item.ultimaActualizacion
-                        };
-                    } else if (item.nombre && item.precio) {
-                        tasasLocales[item.nombre.toLowerCase()] = {
-                            nombre: item.nombre,
-                            precio: Number(item.precio.toFixed(2)),
-                            actualizado: item.ultimaActualizacion
-                        };
-                    }
-                });
-            }
 
             res.statusCode = 200;
             res.end(JSON.stringify({
                 status: "success",
                 bcv_y_paralelo: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
+                pydolar_venezuela: pyDolar.status === 'fulfilled' ? pyDolar.value : null,
                 binance_promedio_usdt: binanceData.status === 'fulfilled' ? binanceData.value : null
             }, null, 2));
 
