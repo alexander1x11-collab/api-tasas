@@ -1,15 +1,12 @@
 {
   "name": "api-tasas",
   "version": "1.0.0",
-  "description": "API de tasas en tiempo real",
+  "description": "API de tasas",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.19.2"
-  },
-  "engines": {
-    "node": "18.x"
   }
 }
