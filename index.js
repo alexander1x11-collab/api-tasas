@@ -19,10 +19,10 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            // Probamos conectarnos a la raíz del dominio o al portal general para ver qué responde
-            const urlObjetivo = 'https://montosve.com/';
+            // URL oficial exacta según la documentación de MontosVE
+            const urlOficial = 'https://montosve.com/fx/rates';
             
-            const response = await fetch(urlObjetivo, {
+            const response = await fetch(urlOficial, {
                 method: 'GET',
                 headers: {
                     'X-API-Key': apiKey,
@@ -32,12 +32,21 @@ const server = http.createServer(async (req, res) => {
 
             const responseText = await response.text();
 
-            res.statusCode = 200;
-            res.end(JSON.stringify({ 
-                estado_prueba: "Conexión realizada con éxito al dominio base",
-                status_recibido: response.status,
-                cuerpo_respuesta: responseText.substring(0, 500) // Muestra los primeros 500 caracteres para analizarlo
-            }, null, 2));
+            try {
+                const data = JSON.parse(responseText);
+                res.statusCode = 200;
+                res.end(JSON.stringify({ 
+                    estado: "Conexión exitosa", 
+                    tasas: data 
+                }, null, 2));
+            } catch (e) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ 
+                    error: "MontosVE no devolvió un JSON válido", 
+                    status_http: response.status,
+                    raw: responseText 
+                }));
+            }
 
         } catch (error) {
             res.statusCode = 500;
