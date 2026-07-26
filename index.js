@@ -3,7 +3,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    res.json({ status: "API Online", endpoint: "/api/tasas" });
+    res.send('¡La API está funcionando perfectamente!');
 });
 
 app.get('/api/tasas', async (req, res) => {
@@ -14,31 +14,17 @@ app.get('/api/tasas', async (req, res) => {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
+                'Accept': 'application/json'
             }
         });
 
-        if (!response.ok) {
-            throw new Error(`Error en MontosVE: ${response.status} ${response.statusText}`);
-        }
-
         const data = await response.json();
-        
-        res.json({
-            success: true,
-            tasas: data
-        });
+        res.json(data);
     } catch (error) {
-        console.error('Detalle del error:', error.message);
-        res.status(500).json({ 
-            success: false, 
-            error: 'No se pudieron cargar las tasas', 
-            detalle: error.message 
-        });
+        res.status(500).json({ error: error.message });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
+    console.log(`Servidor activo en el puerto ${PORT}`);
 });
