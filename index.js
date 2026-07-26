@@ -19,52 +19,35 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            // Lista exhaustiva de variantes de rutas para dar con el endpoint correcto
-            const rutasAProbar = [
-                'https://montosve.com/api/fx/rates',
-                'https://montosve.com/api/v1/rates',
-                'https://montosve.com/v1/rates',
-                'https://montosve.com/api/tasas',
-                'https://montosve.com/fx/rates',
-                'https://montosve.com/api/v1/fx/rates'
-            ];
+            // Petición directa a la URL oficial documentada por MontosVE
+            const response = await fetch('https://montosve.com/v1/fx/rates', {
+                method: 'GET',
+                headers: {
+                    'X-API-Key': apiKey,
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                },
+                redirect: 'follow'
+            });
 
-            let registroResultados = [];
+            const responseText = await response.text();
 
-            for (const url of rutasAProbar) {
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'X-API-Key': apiKey,
-                        'Accept': 'application/json'
-                    }
-                });
-
-                const texto = await response.text();
-                
-                // Verificamos si responde con JSON válido (éxito)
-                if (response.status === 200 && (texto.trim().startsWith('{') || texto.trim().startsWith('['))) {
-                    res.statusCode = 200;
-                    res.end(JSON.stringify({ 
-                        estado: "¡Encontrado con éxito!", 
-                        url_correcta: url, 
-                        tasas: JSON.parse(texto) 
-                    }, null, 2));
-                    return;
-                }
-
-                registroResultados.push({
-                    url_intentada: url,
-                    status: response.status
-                });
+            // Verificamos si respondieron con JSON o si arrojó HTML
+            if (response.ok && (responseText.trim().startsWith('{') || responseText.trim().startsWith('['))) {
+                const data = JSON.parse(responseText);
+                res.statusCode = 200;
+                res.end(JSON.stringify({ 
+                    estado: "Conexión exitosa", 
+                    tasas: data 
+                }, null, 2));
+            } else {
+                res.statusCode = response.status;
+                res.end(JSON.stringify({ 
+                    error: "El servidor externo rechazó la petición o devolvió HTML", 
+                    status_http: response.status,
+                    respuesta_cruda: responseText 
+                }, null, 2));
             }
-
-            // Si ninguna devolvió JSON válido
-            res.statusCode = 500;
-            res.end(JSON.stringify({ 
-                error: "Ninguna ruta devolvió un JSON válido. Todas respondieron con error o HTML.",
-                detalles_intentos: registroResultados 
-            }, null, 2));
 
         } catch (error) {
             res.statusCode = 500;
