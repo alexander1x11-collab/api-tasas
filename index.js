@@ -1,26 +1,23 @@
 const https = require('https');
 
-function fetchJson(url, options = {}) {
+function fetchJson(url) {
     return new Promise((resolve, reject) => {
-        const reqOptions = {
-            headers: { 'User-Agent': 'Mozilla/5.0', ...options.headers }
-        };
-        https.get(url, reqOptions, (res) => {
+        https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => {
                 try {
                     resolve(JSON.parse(data));
                 } catch (e) {
-                    reject(new Error("Respuesta JSON inválida de " + url));
+                    reject(new Error("Respuesta JSON inválida"));
                 }
             });
         }).on('error', err => reject(err));
     });
 }
 
-// Función especial para POST de Binance P2P
-acentosBinance = () => {
+// Función limpia para extraer y limpiar los precios de Binance P2P
+function fetchBinanceP2P() {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({
             asset: "USDT",
@@ -29,7 +26,7 @@ acentosBinance = () => {
             page: 1,
             payTypes: [],
             publisherType: null,
-            rows: 10,
+            rows: 5,
             tradeType: "BUY"
         });
 
@@ -49,9 +46,16 @@ acentosBinance = () => {
             res.on('data', chunk => body += chunk);
             res.on('end', () => {
                 try {
-                    resolve(JSON.parse(body));
+                    const parsed = JSON.parse(body);
+                    // Extraemos solo los precios reales y los convertimos a número con 2 decimales
+                    const precios = parsed.data ? parsed.data.map(item => parseFloat(item.adv.price)) : [];
+                    const promedio = precios.length > 0 ? (precios.reduce((a, b) => a + b, 0) / precios.length).toFixed(2) : null;
+                    resolve({
+                        promedio_p2p: promedio ? Number(promedio) : null,
+                        ofertas: precios
+                    });
                 } catch (e) {
-                    reject(new Error("Error parseando Binance P2P"));
+                    reject(new Error("Error procesando Binance P2P"));
                 }
             });
         });
@@ -60,96 +64,54 @@ acentosBinance = () => {
         req.write(data);
         req.end();
     });
-};
+}
 
 const server = require('http').createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
     if (req.url === '/') {
         res.statusCode = 200;
-        res.end(JSON.stringify({ 
-            mensaje: "Servidor de Render activo y operativo",
-            rutas_disponibles: [
-                "/api/tasas",
-                "/api/exchangerate",
-                "/api/dolarapi",
-                "/api/currency-api",
-                "/api/binance"
-            ]
-        }));
+        res.end(JSON.stringify({ mensaje: "Servidor de tasas activo y limpio" }));
         return;
     }
 
-    // Ruta unificada con todas las tasas principales
     if (req.url === '/api/tasas') {
         try {
-            const [exRateUSD, dolarApi, currencyApi, binanceP2P] = await Promise.allSettled([
-                fetchJson('https://api.exchangerate-api.com/v4/latest/USD'),
+            const [dolarApi, binanceData] = await Promise.allSettled([
                 fetchJson('https://ve.dolarapi.com/v1/dolares'),
-                fetchJson('https://latest.currency-api.pages.dev/v1/currencies/usd.json'),
-                acentosBinance()
+                fetchBinanceP2P()
             ]);
+
+            // Formateamos DolarApi para que muestre nombres limpios y valores bien redondeados
+            let tasasLocales = {};
+            if (dolarApi.status === 'fulfilled' && Array.isArray(dolarApi.value)) {
+                dolarApi.value.forEach(item => {
+                    if (item.fuente && item.promedio) {
+                        tasasLocales[item.fuente] = {
+                            nombre: item.nombre || item.fuente,
+                            precio: Number(item.promedio.toFixed(2)),
+                            actualizado: item.ultimaActualizacion
+                        };
+                    } else if (item.nombre && item.precio) {
+                        tasasLocales[item.nombre.toLowerCase()] = {
+                            nombre: item.nombre,
+                            precio: Number(item.precio.toFixed(2)),
+                            actualizado: item.ultimaActualizacion
+                        };
+                    }
+                });
+            }
 
             res.statusCode = 200;
             res.end(JSON.stringify({
                 status: "success",
-                exchangerate_api: exRateUSD.status === 'fulfilled' ? exRateUSD.value : null,
-                dolarapi_ve: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
-                currency_api: currencyApi.status === 'fulfilled' ? currencyApi.value : null,
-                binance_p2p: binanceP2P.status === 'fulfilled' ? binanceP2P.value : null
+                bcv_y_paralelo: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
+                binance_promedio_usdt: binanceData.status === 'fulfilled' ? binanceData.value : null
             }, null, 2));
+
         } catch (error) {
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Error al consolidar las tasas", detalle: error.message }));
-        }
-        return;
-    }
-
-    // Rutas individuales por proveedor
-    if (req.url === '/api/exchangerate') {
-        try {
-            const data = await fetchJson('https://api.exchangerate-api.com/v4/latest/USD');
-            res.statusCode = 200;
-            res.end(JSON.stringify(data, null, 2));
-        } catch (e) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: e.message }));
-        }
-        return;
-    }
-
-    if (req.url === '/api/dolarapi') {
-        try {
-            const data = await fetchJson('https://ve.dolarapi.com/v1/dolares');
-            res.statusCode = 200;
-            res.end(JSON.stringify(data, null, 2));
-        } catch (e) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: e.message }));
-        }
-        return;
-    }
-
-    if (req.url === '/api/currency-api') {
-        try {
-            const data = await fetchJson('https://latest.currency-api.pages.dev/v1/currencies/usd.json');
-            res.statusCode = 200;
-            res.end(JSON.stringify(data, null, 2));
-        } catch (e) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: e.message }));
-        }
-        return;
-    }
-
-    if (req.url === '/api/binance') {
-        try {
-            const data = await acentosBinance();
-            res.statusCode = 200;
-            res.end(JSON.stringify(data, null, 2));
-        } catch (e) {
-            res.statusCode = 500;
-            res.end(JSON.stringify({ error: e.message }));
+            res.end(JSON.stringify({ error: "Error al obtener tasas", detalle: error.message }));
         }
         return;
     }
@@ -160,5 +122,5 @@ const server = require('http').createServer(async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Servidor multi-API corriendo en puerto ${PORT}`);
+    console.log(`Servidor corriendo en puerto ${PORT}`);
 });
