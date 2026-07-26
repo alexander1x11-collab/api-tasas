@@ -69,24 +69,24 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/') {
         res.statusCode = 200;
-        res.end(JSON.stringify({ mensaje: "Servidor de tasas multi-fuente activo" }));
+        res.end(JSON.stringify({ mensaje: "Servidor de tasas optimizado activo" }));
         return;
     }
 
     if (req.url === '/api/tasas') {
         try {
-            // Consultamos en paralelo DolarApi, PyDolarVenezuela y Binance P2P
-            const [dolarApi, pyDolar, binanceData] = await Promise.allSettled([
-                fetchJson('https://ve.dolarapi.com/v1/dolares'),
+            // Consultamos PyDolarVenezuela (para BCV y Euro oficial al día), DolarApi y Binance P2P
+            const [pyDolar, dolarApi, binanceData] = await Promise.allSettled([
                 fetchJson('https://pydolarvenezuela-api.vercel.app/api/v1/dollar'),
+                fetchJson('https://ve.dolarapi.com/v1/dolares'),
                 fetchBinanceP2P()
             ]);
 
             res.statusCode = 200;
             res.end(JSON.stringify({
                 status: "success",
-                bcv_y_paralelo: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
-                pydolar_venezuela: pyDolar.status === 'fulfilled' ? pyDolar.value : null,
+                bcv_y_oficiales_actualizados: pyDolar.status === 'fulfilled' ? pyDolar.value : null,
+                dolarapi_respaldo: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
                 binance_promedio_usdt: binanceData.status === 'fulfilled' ? binanceData.value : null
             }, null, 2));
 
