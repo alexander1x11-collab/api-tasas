@@ -2,14 +2,26 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.get('/', (req, res) => {
+    res.json({ status: "API Online", endpoint: "/api/tasas" });
+});
+
 app.get('/api/tasas', async (req, res) => {
     try {
+        const apiKey = process.env.API_KEY;
+        
         const response = await fetch('https://montosve.com/api/v1/fx/rates', {
             method: 'GET',
             headers: {
-                'X-API-Key': process.env.API_KEY
+                'Authorization': `Bearer ${apiKey}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
+
+        if (!response.ok) {
+            throw new Error(`Error en MontosVE: ${response.status} ${response.statusText}`);
+        }
 
         const data = await response.json();
         
@@ -18,8 +30,12 @@ app.get('/api/tasas', async (req, res) => {
             tasas: data
         });
     } catch (error) {
-        console.error('Error al obtener las tasas:', error);
-        res.status(500).json({ success: false, error: 'No se pudieron cargar las tasas' });
+        console.error('Detalle del error:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            error: 'No se pudieron cargar las tasas', 
+            detalle: error.message 
+        });
     }
 });
 
