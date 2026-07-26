@@ -3,8 +3,8 @@ const https = require('https');
 function consultarMontosVE(apiKey) {
     return new Promise((resolve, reject) => {
         const opciones = {
-            hostname: 'montosve.com',
-            path: '/api/v1/fx/rates',
+            hostname: 'api.montosve.com',
+            path: '/v1/fx/rates',
             method: 'GET',
             headers: {
                 'X-API-Key': apiKey,
@@ -41,7 +41,6 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            // Toma la clave que configuraste en Render
             const apiKey = process.env.API_KEY || process.env.NEW_SECRET;
 
             if (!apiKey) {
@@ -57,7 +56,7 @@ const server = require('http').createServer(async (req, res) => {
 
         } catch (error) {
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Error interno al conectar con MontosVE", detalle: error.message }));
+            res.end(JSON.stringify({ error: "Error interno al conectar", detalle: error.message }));
         }
         return;
     }
