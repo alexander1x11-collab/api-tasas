@@ -9,7 +9,7 @@ function fetchJson(url) {
                 try {
                     resolve(JSON.parse(data));
                 } catch (e) {
-                    reject(new Error("Respuesta JSON inválida"));
+                    reject(new Error("Respuesta JSON inválida de " + url));
                 }
             });
         }).on('error', err => reject(err));
@@ -48,10 +48,7 @@ function fetchBinanceP2P() {
                     const parsed = JSON.parse(body);
                     const precios = parsed.data ? parsed.data.map(item => parseFloat(item.adv.price)) : [];
                     const promedio = precios.length > 0 ? (precios.reduce((a, b) => a + b, 0) / precios.length).toFixed(2) : null;
-                    resolve({
-                        promedio_p2p: promedio ? Number(promedio) : null,
-                        ofertas: precios
-                    });
+                    resolve(promedio ? Number(promedio) : null);
                 } catch (e) {
                     reject(new Error("Error procesando Binance P2P"));
                 }
@@ -75,24 +72,40 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/api/tasas') {
         try {
-            // Consultamos PyDolarVenezuela (para BCV y Euro oficial al día), DolarApi y Binance P2P
-            const [pyDolar, dolarApi, binanceData] = await Promise.allSettled([
-                fetchJson('https://pydolarvenezuela-api.vercel.app/api/v1/dollar'),
-                fetchJson('https://ve.dolarapi.com/v1/dolares'),
+            // Consultamos en paralelo tus APIs de confianza y Binance P2P
+            const [currencyEur, openErUsd, openErEur, binanceP2P] = await Promise.allSettled([
+                fetchJson('https://latest.currency-api.pages.dev/v1/currencies/eur.json'),
+                fetchJson('https://open.er-api.com/v6/latest/USD'),
+                fetchJson('https://open.er-api.com/v6/latest/EUR'),
                 fetchBinanceP2P()
             ]);
+
+            // Extraemos los valores limpios de VES (Bolívares) desde las respuestas
+            let tasaUsdOpenEr = openErUsd.status === 'fulfilled' ? openErUsd.value.rates?.VES : null;
+            let tasaEurOpenEr = openErEur.status === 'fulfilled' ? openErEur.value.rates?.VES : null;
+            let tasaEurCurrencyApi = currencyEur.status === 'fulfilled' ? currencyEur.value.eur?.ves : null;
+            let promedioBinance = binanceP2P.status === 'fulfilled' ? binanceP2P.value : null;
 
             res.statusCode = 200;
             res.end(JSON.stringify({
                 status: "success",
-                bcv_y_oficiales_actualizados: pyDolar.status === 'fulfilled' ? pyDolar.value : null,
-                dolarapi_respaldo: dolarApi.status === 'fulfilled' ? dolarApi.value : null,
-                binance_promedio_usdt: binanceData.status === 'fulfilled' ? binanceData.value : null
+                actualizado: new Date().toISOString(),
+                tasas_venezuela: {
+                    dolar_usdt_binance: promedioBinance,
+                    dolar_open_er: tasaUsdOpenEr ? Number(tasaUsdOpenEr.toFixed(2)) : null,
+                    euro_open_er: tasaEurOpenEr ? Number(tasaEurOpenEr.toFixed(2)) : null,
+                    euro_currency_api: tasaEurCurrencyApi ? Number(tasaEurCurrencyApi.toFixed(2)) : null
+                },
+                respuestas_crudas: {
+                    open_er_usd: openErUsd.status === 'fulfilled' ? openErUsd.value : null,
+                    open_er_eur: openErEur.status === 'fulfilled' ? openErEur.value : null,
+                    currency_api_eur: currencyEur.status === 'fulfilled' ? currencyEur.value : null
+                }
             }, null, 2));
 
         } catch (error) {
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: "Error al obtener tasas", detalle: error.message }));
+            res.end(JSON.stringify({ error: "Error al procesar las tasas", detalle: error.message }));
         }
         return;
     }
