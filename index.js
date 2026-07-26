@@ -1,49 +1,28 @@
 const express = require('express');
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 
-app.get('/', async (req, res) => {
-    let bcvVal = null;
-    let euroVal = null;
-    let usdtVal = null;
-
+app.get('/api/tasas', async (req, res) => {
     try {
-        const response = await fetch('https://ve.dolarapi.com/v1/dolares', {
-            headers: { 'Cache-Control': 'no-cache' }
+        const response = await fetch('https://montosve.com/api/v1/fx/rates', {
+            method: 'GET',
+            headers: {
+                'X-API-Key': process.env.API_KEY
+            }
         });
-        if (response.ok) {
-            const data = await response.json();
-            const oficial = data.find(item => item.fuente === 'oficial' || item.nombre === 'Oficial');
-            const euro = data.find(item => item.nombre && item.nombre.toLowerCase().includes('euro'));
-            
-            if (oficial) bcvVal = oficial.promedio || oficial.precio;
-            if (euro) euroVal = euro.promedio || euro.precio;
-        }
-    } catch (e) {
-        console.log("Error dolarapi");
-    }
 
-    try {
-        const paraleloRes = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar/enparalelovzla', {
-            headers: { 'Cache-Control': 'no-cache' }
+        const data = await response.json();
+        
+        res.json({
+            success: true,
+            tasas: data
         });
-        if (paraleloRes.ok) {
-            const paraleloData = await paraleloRes.json();
-            usdtVal = paraleloData?.price || null;
-        }
-    } catch (e) {
-        console.log("Error paralelo");
+    } catch (error) {
+        console.error('Error al obtener las tasas:', error);
+        res.status(500).json({ success: false, error: 'No se pudieron cargar las tasas' });
     }
-
-    res.json({
-        estado: "Operativo",
-        bcv: bcvVal ? Number(bcvVal) : 737.88,
-        euro: euroVal ? Number(euroVal) : 776.25,
-        usdt: usdtVal ? Number(usdtVal) : 864.33,
-        actualizado: new Date().toLocaleString("es-VE", { timeZone: "America/Caracas" })
-    });
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor activo en puerto ${PORT}`);
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
