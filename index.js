@@ -20,10 +20,11 @@ const server = http.createServer(async (req, res) => {
                 return;
             }
 
-            const response = await fetch('https://montosve.com/api/v1/fx/rates', {
+            // URL y cabecera corregidas según la documentación oficial de MontosVE
+            const response = await fetch('https://montosve.com/v1/fx/rates', {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`,
+                    'X-API-Key': apiKey,
                     'Accept': 'application/json'
                 }
             });
