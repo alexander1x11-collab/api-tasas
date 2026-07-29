@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 
-// Middleware estricto para evitar caché en Render y forzar lectura inmediata
+// Middleware para evitar caché en Render
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -9,50 +9,50 @@ app.use((req, res, next) => {
     next();
 });
 
-// Endpoint unificado para todas las tasas reales
 app.get('/api/tasas', async (req, res) => {
-    let bcvData = null;
-    let paraleloData = null;
-    let binanceData = null;
+    let bcvDolar = 0;
+    let bcvEuro = 0;
+    let paralelo = 0;
+    let usdtBinance = 0;
 
-    // Ejecutamos las peticiones en paralelo para máxima velocidad
     try {
-        const [respBcv, respPy, respBinance] = await Promise.allSettled([
+        const [respBcvDolar, respBcvEuro, respParalelo, respBinance] = await Promise.allSettled([
             fetch('https://ve.dolarapi.com/v1/dolares/oficial', { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-            fetch('https://pydolarvenezuela-api.onrender.com/api/v1/dollar/bcv', { headers: { 'User-Agent': 'Mozilla/5.0' } }),
+            fetch('https://ve.dolarapi.com/v1/euros/oficial', { headers: { 'User-Agent': 'Mozilla/5.0' } }),
+            fetch('https://ve.dolarapi.com/v1/dolares/paralelo', { headers: { 'User-Agent': 'Mozilla/5.0' } }),
             fetch('https://pydolarvenezuela-api.onrender.com/api/v1/dollar/enparalelo', { headers: { 'User-Agent': 'Mozilla/5.0' } })
         ]);
 
-        // Procesar fuente BCV principal (DolarApi)
-        if (respBcv.status === 'fulfilled' && respBcv.value.ok) {
-            const json = await respBcv.value.json();
-            bcvData = json.promedio || json.price;
+        // 1. Dólar BCV
+        if (respBcvDolar.status === 'fulfilled' && respBcvDolar.value.ok) {
+            const json = await respBcvDolar.value.json();
+            bcvDolar = json.promedio || json.price || 0;
         }
 
-        // Respaldo BCV si falla el primero (PyDolarVenezuela)
-        if (!bcvData && respPy.status === 'fulfilled' && respPy.value.ok) {
-            const jsonPy = await respPy.value.json();
-            bcvData = jsonPy.monedas?.bcv?.precio || jsonPy.price;
+        // 2. Euro BCV
+        if (respBcvEuro.status === 'fulfilled' && respBcvEuro.value.ok) {
+            const json = await respBcvEuro.value.json();
+            bcvEuro = json.promedio || json.price || 0;
         }
 
-        // Procesar Paralelo
+        // 3. Paralelo (DolarApi)
+        if (respParalelo.status === 'fulfilled' && respParalelo.value.ok) {
+            const json = await respParalelo.value.json();
+            paralelo = json.promedio || json.price || 0;
+        }
+
+        // 4. USDT / Paralelo de respaldo (PyDolarVenezuela)
         if (respBinance.status === 'fulfilled' && respBinance.value.ok) {
-            const jsonParalelo = await respBinance.value.json();
-            paraleloData = jsonParalelo.monedas?.enparalelo?.precio || jsonParalelo.promedio;
+            const json = await respBinance.value.json();
+            // Captura flexible según la estructura de PyDolarVenezuela
+            usdtBinance = json.monedas?.enparalelo?.precio || json.price || json.promedio || 0;
+            if (paralelo === 0) paralelo = usdtBinance; // Si el paralelo de DolarApi falló, usa este
         }
 
     } catch (error) {
-        console.error("Error recolectando las fuentes:", error.message);
+        console.error("Error recolectando las tasas:", error.message);
     }
 
-    // Si de forma crítica ninguna fuente responde
-    if (!bcvData && !paraleloData) {
-        return res.status(500).json({ 
-            error: "Imposible conectar con las fuentes de tasas en este momento." 
-        });
-    }
-
-    // Fecha y hora exacta de Venezuela para marcar el cambio al instante
     const fechaVenezuela = new Date().toLocaleDateString('es-VE', {
         timeZone: 'America/Caracas',
         year: 'numeric',
@@ -67,13 +67,14 @@ app.get('/api/tasas', async (req, res) => {
         second: '2-digit'
     });
 
-    // Respuesta limpia y estructurada que lee tu aplicación de inmediato
     return res.json({
         actualizado_en: `${fechaVenezuela} a las ${horaVenezuela}`,
-        fuente_principal: "Consolidado en Tiempo Real",
+        fuente_principal: "Consolidado Multifuente en Tiempo Real",
         tasas: {
-            bcv: bcvData || 0,
-            paralelo: paraleloData || 0
+            bcv: bcvDolar,
+            euro: bcvEuro,
+            paralelo: paralelo,
+            usdt: usdtBinance || paralelo
         }
     });
 });
