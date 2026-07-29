@@ -1,18 +1,15 @@
 const express = require('express');
 const app = express();
 
-// Middleware para evitar caché en las respuestas
 app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-validate, proxy-revalidate');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     next();
 });
 
-// Endpoint único en index.js
 app.get('/api/tasa', async (req, res) => {
     try {
-        // Fecha actual en la zona horaria de Venezuela
         const fechaVenezuela = new Date().toLocaleDateString('es-VE', {
             timeZone: 'America/Caracas',
             year: 'numeric',
@@ -20,7 +17,6 @@ app.get('/api/tasa', async (req, res) => {
             day: '2-digit'
         });
 
-        // Petición usando fetch nativo de Node.js (sin necesidad de axios)
         const respuesta = await fetch('https://ve.dolarapi.com/v1/dolares/oficial');
         const data = await respuesta.json();
         
@@ -41,6 +37,6 @@ app.get('/api/tasa', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
 });
