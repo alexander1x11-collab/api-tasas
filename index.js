@@ -10,35 +10,45 @@ let ultimaTasaGuardada = {
     ultimaActualizacion: "Esperando primera sincronización..."
 };
 
+// Variable temporal para diagnóstico en pantalla
+let ultimoRawDeMontosVE = "Aún no se ha consultado";
+
 async function actualizarTasasDesdeMontosVE() {
     try {
         console.log("🔄 Consultando la API externa de MontosVE...");
         const apiKey = "tasasve_WfEcEhpgDzrvpJsbVHFAe86RhOV7G5rdPtQM6zhG3a9268f9";
         const response = await axios.get(`https://api.montosve.com/v1/rates?apikey=${apiKey}`);
 
-        // Esto imprimirá exactamente la respuesta en los logs de Render
-        console.log("📦 Respuesta completa de MontosVE:", JSON.stringify(response.data));
+        // Guardamos lo que respondió exactamente para que lo veas en la web
+        ultimoRawDeMontosVE = response.data;
+        console.log("📦 Respuesta de MontosVE:", JSON.stringify(response.data));
 
         if (response.data) {
-            ultimaTasaGuardada = response.data;
-            ultimaTasaGuardada.ultimaActualizacion = new Date().toLocaleString();
-            console.log("✅ Tasas guardadas en el servidor con éxito.");
+            // Intentamos extraer los valores adaptándonos a cualquier formato posible
+            const datos = response.data.data || response.data;
+            
+            ultimaTasaGuardada = {
+                bcv: datos.bcv || datos.BCV || datos.tasa_bcv || 0,
+                euro: datos.euro || datos.Euro || datos.tasa_euro || 0,
+                usdt: datos.usdt || datos.USDT || datos.tasa_usdt || 0,
+                ultimaActualizacion: new Date().toLocaleString()
+            };
+            console.log("✅ Tasas procesadas y guardadas correctamente.");
         }
     } catch (error) {
-        // Esto imprimirá si la API de MontosVE rechazó la llave o dio algún error
-        console.error("❌ Error detallado al conectar con MontosVE:", error.response ? error.response.data : error.message);
+        console.error("❌ Error al conectar con MontosVE:", error.response ? error.response.data : error.message);
     }
 }
 
-// 1. Ejecutar una consulta al arrancar el servidor
+// Ejecutar al arrancar
 actualizarTasasDesdeMontosVE();
 
-// 2. Configurar la Tarea Programada (Cron Job) en las horas clave para ahorrar peticiones
+// Tarea programada en las horas clave
 cron.schedule('0 9,13,18,20 * * *', () => {
     actualizarTasasDesdeMontosVE();
 });
 
-// Ruta raíz (Tu bienvenida original)
+// Ruta raíz
 app.get('/', (req, res) => {
     res.json({
         "mensaje": "API de Corporativo",
@@ -46,7 +56,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// Ruta para entregar las tasas guardadas a tu App DOLAR-VES (sin gastar peticiones)
+// Ruta principal para tu app
 app.get('/api/tasas-actuales', (req, res) => {
     res.json({
         success: true,
@@ -54,13 +64,13 @@ app.get('/api/tasas-actuales', (req, res) => {
     });
 });
 
-// Ruta manual para forzar la actualización y ver el resultado
-app.get('/api/actualizar-ahora', async (req, res) => {
+// NUEVA RUTA DE DIAGNÓSTICO: Entra aquí para forzar y ver exactamente qué respondió MontosVE en tu pantalla
+app.get('/api/debug-montosve', async (req, res) => {
     await actualizarTasasDesdeMontosVE();
-    res.json({ 
-        success: true, 
-        mensaje: "Sincronización forzada ejecutada correctamente", 
-        data: ultimaTasaGuardada 
+    res.json({
+        success: true,
+        respuestaCrudaDeMontosVE: ultimoRawDeMontosVE,
+        tasasProcesadasEnServidor: ultimaTasaGuardada
     });
 });
 
