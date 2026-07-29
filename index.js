@@ -1,10 +1,9 @@
 const express = require('express');
-const axios = require('axios');
 const app = express();
 
 // Middleware para evitar caché en las respuestas
 app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-validate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     next();
@@ -21,13 +20,14 @@ app.get('/api/tasa', async (req, res) => {
             day: '2-digit'
         });
 
-        // Petición a la fuente oficial/abierta de tasas (PyDolarVenezuela / DolarApi)
-        const respuesta = await axios.get('https://ve.dolarapi.com/v1/dolares/oficial');
+        // Petición usando fetch nativo de Node.js (sin necesidad de axios)
+        const respuesta = await fetch('https://ve.dolarapi.com/v1/dolares/oficial');
+        const data = await respuesta.json();
         
         const datosTasa = {
             fuente: "BCV",
-            precio: respuesta.data.promedio,
-            moneda: respuesta.data.nombre,
+            precio: data.promedio,
+            moneda: data.nombre,
             fechaConsulta: fechaVenezuela,
             actualizado: new Date().toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' })
         };
