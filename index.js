@@ -16,13 +16,17 @@ async function actualizarTasasDesdeMontosVE() {
         const apiKey = "tasasve_WfEcEhpgDzrvpJsbVHFAe86RhOV7G5rdPtQM6zhG3a9268f9";
         const response = await axios.get(`https://api.montosve.com/v1/rates?apikey=${apiKey}`);
 
+        // Esto imprimirá exactamente la respuesta en los logs de Render
+        console.log("📦 Respuesta completa de MontosVE:", JSON.stringify(response.data));
+
         if (response.data) {
             ultimaTasaGuardada = response.data;
             ultimaTasaGuardada.ultimaActualizacion = new Date().toLocaleString();
             console.log("✅ Tasas guardadas en el servidor con éxito.");
         }
     } catch (error) {
-        console.error("❌ Error al actualizar la tasa externa:", error.message);
+        // Esto imprimirá si la API de MontosVE rechazó la llave o dio algún error
+        console.error("❌ Error detallado al conectar con MontosVE:", error.response ? error.response.data : error.message);
     }
 }
 
@@ -50,7 +54,7 @@ app.get('/api/tasas-actuales', (req, res) => {
     });
 });
 
-// Ruta manual por si quieres forzar la actualización de las tasas al instante desde el navegador
+// Ruta manual para forzar la actualización y ver el resultado
 app.get('/api/actualizar-ahora', async (req, res) => {
     await actualizarTasasDesdeMontosVE();
     res.json({ 
