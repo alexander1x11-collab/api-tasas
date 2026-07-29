@@ -16,6 +16,27 @@ function fetchJson(url) {
     });
 }
 
+// Función para consultar la tasa oficial directa desde el BCV (o un servicio intermediario confiable de tasas oficiales de Venezuela)
+function fetchBcvOficial() {
+    return new Promise((resolve, reject) => {
+        // Usamos una API pública de confianza orientada a tasas oficiales de Venezuela o el portal del BCV
+        https.get('https://pydolarve.org/api/v1/dollar?monitor=bcv', { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    // Extraemos el valor oficial del BCV actual / fecha valor
+                    const precioBcv = parsed.price ? Number(parsed.price) : null;
+                    resolve(precioBcv);
+                } catch (e) {
+                    reject(new Error("Error procesando tasa oficial BCV"));
+                }
+            });
+        }).on('error', err => reject(err));
+    });
+}
+
 function fetchBinanceP2P() {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({
@@ -66,21 +87,21 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/') {
         res.statusCode = 200;
-        res.end(JSON.stringify({ mensaje: "Servidor de tasas optimizado activo" }));
+        res.end(JSON.stringify({ mensaje: "Servidor de tasas optimizado activo con BCV" }));
         return;
     }
 
     if (req.url === '/api/tasas') {
         try {
-            // Consultamos en paralelo tus APIs de confianza y Binance P2P
-            const [currencyEur, openErUsd, openErEur, binanceP2P] = await Promise.allSettled([
+            const [bcvOficial, currencyEur, openErUsd, openErEur, binanceP2P] = await Promise.allSettled([
+                fetchBcvOficial(),
                 fetchJson('https://latest.currency-api.pages.dev/v1/currencies/eur.json'),
                 fetchJson('https://open.er-api.com/v6/latest/USD'),
                 fetchJson('https://open.er-api.com/v6/latest/EUR'),
                 fetchBinanceP2P()
             ]);
 
-            // Extraemos los valores limpios de VES (Bolívares) desde las respuestas
+            let tasaBcvOficial = bcvOficial.status === 'fulfilled' ? bcvOficial.value : null;
             let tasaUsdOpenEr = openErUsd.status === 'fulfilled' ? openErUsd.value.rates?.VES : null;
             let tasaEurOpenEr = openErEur.status === 'fulfilled' ? openErEur.value.rates?.VES : null;
             let tasaEurCurrencyApi = currencyEur.status === 'fulfilled' ? currencyEur.value.eur?.ves : null;
@@ -91,15 +112,11 @@ const server = require('http').createServer(async (req, res) => {
                 status: "success",
                 actualizado: new Date().toISOString(),
                 tasas_venezuela: {
+                    dolar_bcv_oficial: tasaBcvOficial,
                     dolar_usdt_binance: promedioBinance,
                     dolar_open_er: tasaUsdOpenEr ? Number(tasaUsdOpenEr.toFixed(2)) : null,
                     euro_open_er: tasaEurOpenEr ? Number(tasaEurOpenEr.toFixed(2)) : null,
                     euro_currency_api: tasaEurCurrencyApi ? Number(tasaEurCurrencyApi.toFixed(2)) : null
-                },
-                respuestas_crudas: {
-                    open_er_usd: openErUsd.status === 'fulfilled' ? openErUsd.value : null,
-                    open_er_eur: openErEur.status === 'fulfilled' ? openErEur.value : null,
-                    currency_api_eur: currencyEur.status === 'fulfilled' ? currencyEur.value : null
                 }
             }, null, 2));
 
