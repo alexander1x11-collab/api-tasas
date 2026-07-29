@@ -26,15 +26,15 @@ async function actualizarTasasDesdeMontosVE() {
     }
 }
 
-// Ejecutar al arrancar
+// Ejecutar al arrancar para tener datos de inmediato
 actualizarTasasDesdeMontosVE();
 
-// Tarea programada en las horas clave
+// Tarea programada (Cron Job) en las horas clave para ahorrar peticiones
 cron.schedule('0 9,13,18,20 * * *', () => {
     actualizarTasasDesdeMontosVE();
 });
 
-// Ruta raíz que ya tenías
+// Ruta raíz (Bienvenida)
 app.get('/', (req, res) => {
     res.json({
         "mensaje": "API de Corporativo",
@@ -42,7 +42,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// NUEVA RUTA para tu App DOLAR-VES
+// NUEVA RUTA para entregar las tasas guardadas a tu App DOLAR-VES
 app.get('/api/tasas-actuales', (req, res) => {
     res.json({
         success: true,
