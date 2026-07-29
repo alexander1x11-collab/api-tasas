@@ -3,7 +3,6 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
-// Variable en memoria del servidor que guarda la última tasa obtenida
 let ultimaTasaGuardada = {
     bcv: 0,
     euro: 0,
@@ -11,7 +10,6 @@ let ultimaTasaGuardada = {
     ultimaActualizacion: "Esperando primera sincronización..."
 };
 
-// Función que consulta a MontosVE (solo se ejecuta en las horas clave)
 async function actualizarTasasDesdeMontosVE() {
     try {
         console.log("🔄 Consultando la API externa de MontosVE...");
@@ -28,10 +26,10 @@ async function actualizarTasasDesdeMontosVE() {
     }
 }
 
-// 1. Ejecutar una consulta al arrancar el servidor para no tener datos en cero
+// 1. Ejecutar una consulta al arrancar el servidor
 actualizarTasasDesdeMontosVE();
 
-// 2. Configurar la Tarea Programada (Cron Job) en las horas clave (Apertura, mediodía y cierres)
+// 2. Configurar la Tarea Programada (Cron Job) en las horas clave para ahorrar peticiones
 cron.schedule('0 9,13,18,20 * * *', () => {
     actualizarTasasDesdeMontosVE();
 });
@@ -44,11 +42,21 @@ app.get('/', (req, res) => {
     });
 });
 
-// Ruta de consulta para tu App DOLAR-VES (lee directo de la memoria del servidor sin gastar peticiones)
+// Ruta para entregar las tasas guardadas a tu App DOLAR-VES (sin gastar peticiones)
 app.get('/api/tasas-actuales', (req, res) => {
     res.json({
         success: true,
         data: ultimaTasaGuardada
+    });
+});
+
+// Ruta manual por si quieres forzar la actualización de las tasas al instante desde el navegador
+app.get('/api/actualizar-ahora', async (req, res) => {
+    await actualizarTasasDesdeMontosVE();
+    res.json({ 
+        success: true, 
+        mensaje: "Sincronización forzada ejecutada correctamente", 
+        data: ultimaTasaGuardada 
     });
 });
 
