@@ -13,14 +13,9 @@ let ultimaTasaGuardada = {
 async function actualizarTasasDesdeMontosVE() {
     try {
         console.log("🔄 Consultando la API de MontosVE...");
-        
-        // Tu clave API exacta
         const apiKey = "tasasve_WfEcEhpgDzrvpJsbVHFAe86RhOV7G5rdPtQM6zhG3a9268f9";
-
-        // Realizamos la petición a la API de MontosVE pasando tu apikey
         const response = await axios.get(`https://api.montosve.com/v1/rates?apikey=${apiKey}`);
 
-        // Guardamos los datos que devuelve su respuesta
         if (response.data) {
             ultimaTasaGuardada = response.data;
             ultimaTasaGuardada.ultimaActualizacion = new Date().toLocaleString();
@@ -31,15 +26,23 @@ async function actualizarTasasDesdeMontosVE() {
     }
 }
 
-// Ejecutar una vez al arrancar el servidor para no tener los datos en 0
+// Ejecutar al arrancar
 actualizarTasasDesdeMontosVE();
 
-// Tarea programada en las horas clave (Apertura, mediodía y cierres del BCV)
+// Tarea programada en las horas clave
 cron.schedule('0 9,13,18,20 * * *', () => {
     actualizarTasasDesdeMontosVE();
 });
 
-// Endpoint limpio que consultará tu App DOLAR-VES de forma ilimitada
+// Ruta raíz que ya tenías
+app.get('/', (req, res) => {
+    res.json({
+        "mensaje": "API de Corporativo",
+        "autor": "Jandrey"
+    });
+});
+
+// NUEVA RUTA para tu App DOLAR-VES
 app.get('/api/tasas-actuales', (req, res) => {
     res.json({
         success: true,
@@ -49,5 +52,5 @@ app.get('/api/tasas-actuales', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor de DOLAR-VES corriendo en el puerto ${PORT}`);
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
