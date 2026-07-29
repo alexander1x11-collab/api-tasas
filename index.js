@@ -1,26 +1,22 @@
 const https = require('https');
 
-// Función automática que extrae la tasa de la web de montosve.com sin intervención manual
-function fetchMontosVe() {
+// Función directa para obtener la tasa oficial desde una API JSON estable
+function fetchBcvOficial() {
     return new Promise((resolve) => {
-        https.get('https://montosve.com/ilsy-socorro-morenos-team/dashboard', { 
+        https.get('https://pydolarve.org/api/v1/dollar?monitor=bcv', { 
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' 
             } 
         }, (res) => {
-            let html = '';
-            res.on('data', chunk => html += chunk);
+            let data = '';
+            res.on('data', chunk => data += chunk);
             res.on('end', () => {
                 try {
-                    // Lee automáticamente el HTML y busca el valor del dólar BCV y la fecha
-                    const matchDolar = html.match(/BCV[\s\S]*?([0-9]+\.[0-9]{2})\s*<\/div>\s*<p[^>]*>USD\/VES<\/p>/i);
-                    const matchEuro = html.match(/EUR\/VES<\/p>\s*<p[^>]*>([0-9]+\.[0-9]{2})<\/p>/i);
-                    const matchFecha = html.match(/data-flux-text="">([0-9]{2}\/[0-9]{2}\/[0-9]{4})<\/p>/i);
-
+                    const parsed = JSON.parse(data);
+                    // Extraemos directamente el precio y la fecha oficial
                     resolve({
-                        dolar_bcv: matchDolar ? Number(matchDolar[1]) : null,
-                        euro_bcv: matchEuro ? Number(matchEuro[1]) : null,
-                        fecha: matchFecha ? matchFecha[1] : null
+                        precio: parsed.price ? Number(parsed.price) : null,
+                        fecha: parsed.last_update || null
                     });
                 } catch (e) {
                     resolve(null);
@@ -80,18 +76,18 @@ const server = require('http').createServer(async (req, res) => {
 
     if (req.url === '/') {
         res.statusCode = 200;
-        res.end(JSON.stringify({ mensaje: "Servidor sincronizado automáticamente con MontosVe y Binance" }));
+        res.end(JSON.stringify({ mensaje: "Servidor de tasas optimizado activo" }));
         return;
     }
 
     if (req.url === '/api/tasas') {
         try {
-            const [montosData, binanceP2P] = await Promise.allSettled([
-                fetchMontosVe(),
+            const [bcvData, binanceP2P] = await Promise.allSettled([
+                fetchBcvOficial(),
                 fetchBinanceP2P()
             ]);
 
-            let montos = montosData.status === 'fulfilled' ? montosData.value : null;
+            let bcv = bcvData.status === 'fulfilled' ? bcvData.value : null;
             let promedioBinance = binanceP2P.status === 'fulfilled' ? binanceP2P.value : null;
 
             res.statusCode = 200;
@@ -99,9 +95,8 @@ const server = require('http').createServer(async (req, res) => {
                 status: "success",
                 actualizado: new Date().toISOString(),
                 tasas_venezuela: {
-                    dolar_bcv_oficial: montos ? montos.dolar_bcv : null,
-                    euro_bcv_oficial: montos ? montos.euro_bcv : null,
-                    fecha_tasa: montos ? montos.fecha : null,
+                    dolar_bcv_oficial: bcv ? bcv.precio : null,
+                    fecha_tasa: bcv ? bcv.fecha : null,
                     dolar_usdt_binance: promedioBinance
                 }
             }, null, 2));
