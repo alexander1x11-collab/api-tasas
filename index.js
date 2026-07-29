@@ -46,8 +46,8 @@ async function actualizarTasasDesdeMontosVE() {
 // Ejecutar al arrancar
 actualizarTasasDesdeMontosVE();
 
-// Tarea programada en las horas clave
-cron.schedule('0 9,13,18,20 * * *', () => {
+// Tarea programada en las horas clave (9 AM, 1 PM, 3 PM, 6 PM y 8 PM) para ahorrar peticiones
+cron.schedule('0 9,13,15,18,20 * * *', () => {
     actualizarTasasDesdeMontosVE();
 });
 
