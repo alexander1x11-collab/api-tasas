@@ -1,4 +1,4 @@
-app.get(['/api/tasa', '/api/tasas'], async (req, res) => {
+app.get('/api/tasas', async (req, res) => {
     try {
         const fechaVenezuela = new Date().toLocaleDateString('es-VE', {
             timeZone: 'America/Caracas',
